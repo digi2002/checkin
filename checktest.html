@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>群打卡（H5）</title>
+  <style>
+    :root{
+      --bg:#0b1220; --card:#111b2e; --text:#e8eefc; --muted:#a7b3d1;
+      --accent:#5aa7ff; --good:#35d07f; --warn:#ffcc66; --bad:#ff6b6b;
+      --border:rgba(255,255,255,.10);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+      background:linear-gradient(180deg,#070b14 0%, #0b1220 40%, #070b14 100%);
+      color:var(--text);
+    }
+    .wrap{max-width:780px;margin:0 auto;padding:18px;}
+    .top{
+      display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;
+      padding:14px 16px;border:1px solid var(--border);border-radius:14px;background:rgba(17,27,46,.75);backdrop-filter: blur(8px);
+    }
+    h1{font-size:18px;margin:0 0 6px 0;letter-spacing:.2px}
+    .meta{font-size:12px;color:var(--muted);line-height:1.4}
+    .pill{
+      display:inline-flex;align-items:center;gap:6px;
+      font-size:12px;color:var(--muted);
+      border:1px solid var(--border);border-radius:999px;padding:6px 10px;
+      background:rgba(255,255,255,.03);
+      margin-right:8px;margin-top:6px;
+    }
+    .grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px;}
+    @media (min-width: 720px){ .grid{grid-template-columns:1.1fr .9fr;} }
+    .card{
+      border:1px solid var(--border);border-radius:14px;background:rgba(17,27,46,.75);
+      padding:14px 16px;
+    }
+    .card h2{font-size:14px;margin:0 0 10px 0;color:#dbe6ff}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input, textarea{
+      width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border);
+      color:var(--text);border-radius:10px;padding:10px 12px;outline:none;
+    }
+    textarea{min-height:80px;resize:vertical}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .row > *{flex:1}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    button{
+      border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;background:rgba(255,255,255,.05);color:var(--text);
+      cursor:pointer;font-weight:600;
+    }
+    button.primary{background:linear-gradient(135deg, rgba(90,167,255,.35), rgba(90,167,255,.10)); border-color:rgba(90,167,255,.45)}
+    button.good{background:linear-gradient(135deg, rgba(53,208,127,.28), rgba(53,208,127,.08)); border-color:rgba(53,208,127,.40)}
+    button.warn{background:linear-gradient(135deg, rgba(255,204,102,.22), rgba(255,204,102,.06)); border-color:rgba(255,204,102,.35)}
+    button.danger{background:linear-gradient(135deg, rgba(255,107,107,.22), rgba(255,107,107,.06)); border-color:rgba(255,107,107,.35)}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .status{
+      display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+      padding:12px 12px;border-radius:12px;border:1px solid var(--border);
+      background:rgba(255,255,255,.03);
+    }
+    .big{font-size:18px;font-weight:800}
+    .small{font-size:12px;color:var(--muted);line-height:1.4}
+    .tag{
+      font-size:12px;font-weight:700;border-radius:999px;padding:7px 10px;border:1px solid var(--border);
+      background:rgba(255,255,255,.03);
+    }
+    .tag.ok{border-color:rgba(53,208,127,.55); color:#bff5d7}
+    .tag.no{border-color:rgba(255,204,102,.55); color:#ffe4a8}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{font-size:12px;padding:8px 6px;border-bottom:1px solid var(--border);text-align:left;color:var(--muted)}
+    th{color:#cfe0ff;font-weight:700}
+    td strong{color:var(--text)}
+    .hint{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+    .toast{
+      position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+      background:rgba(17,27,46,.92);border:1px solid var(--border);color:var(--text);
+      padding:10px 12px;border-radius:12px;font-size:12px;max-width:92vw;
+      display:none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1 id="title">群打卡（H5）</h1>
+        <div class="meta">
+          打开即用（纯前端版）。默认通过链接参数区分“活动/群”。<br/>
+          建议用“群专属链接”发群里：<span class="mono">?activity=xxx&group_code=群码</span>
+        </div>
+        <div>
+          <span class="pill">活动：<span id="activityPill" class="mono">-</span></span>
+          <span class="pill">群码：<span id="groupPill" class="mono">-</span></span>
+          <span class="pill">今日：<span id="todayPill" class="mono">-</span></span>
+        </div>
+      </div>
+      <div class="meta mono" style="text-align:right">
+        v0.1<br/>
+        <span id="envPill"></span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>1) 加入与身份</h2>
+        <div class="row">
+          <div>
+            <label>昵称（建议：群内常用称呼）</label>
+            <input id="nickname" placeholder="例如：小王 / Qi / 张三" maxlength="20" />
+          </div>
+          <div>
+            <label>手机号（可选，用于更稳定识别）</label>
+            <input id="phone" placeholder="可不填" maxlength="20" />
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <label>活动ID（从链接自动读取，可手动改）</label>
+            <input id="activity" class="mono" placeholder="activity" />
+          </div>
+          <div>
+            <label>群码 group_code（从链接自动读取，可手动改）</label>
+            <input id="groupCode" class="mono" placeholder="group_code" />
+          </div>
+        </div>
+
+        <div class="btns">
+          <button class="primary" id="btnSaveProfile">保存并进入</button>
+          <button class="warn" id="btnCopyLink">复制群专属链接</button>
+          <button class="danger" id="btnReset">清空本机数据</button>
+        </div>
+
+        <div class="hint">
+          说明：本版本不依赖后端，数据保存在你自己的手机/电脑里；后续接入后端后，就能做全群统一排行与统计。
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2) 今日打卡</h2>
+
+        <div class="status">
+          <div>
+            <div class="big" id="statusText">未初始化</div>
+            <div class="small" id="statusSub">请先保存昵称与群码。</div>
+          </div>
+          <div class="tag no" id="statusTag">未打卡</div>
+        </div>
+
+        <div style="margin-top:10px;">
+          <label>打卡备注（可选）</label>
+          <textarea id="remark" placeholder="例如：今天完成30分钟运动 / 阅读20页"></textarea>
+        </div>
+
+        <div class="btns">
+          <button class="good" id="btnCheckin">一键打卡</button>
+          <button id="btnViewMine">查看我的记录</button>
+          <button id="btnExport">导出CSV（本机）</button>
+        </div>
+
+        <div class="hint">
+          规则：同一用户同一群同一天只允许一次打卡。<br/>
+          时间以你设备本地时间为准。
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <h2>3) 榜单（本机演示版）</h2>
+      <div class="meta">
+        当前为“纯前端演示”：只显示你本机累计过的用户记录（如果多人共用一台设备会看到多人；正常手机里通常只会看到自己）。
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:42%">用户</th>
+            <th style="width:20%">累计</th>
+            <th style="width:20%">近7天</th>
+            <th style="width:18%">最后一次</th>
+          </tr>
+        </thead>
+        <tbody id="rankBody">
+          <tr><td colspan="4">暂无数据</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <h2>4) 后续接后端（可选）</h2>
+      <div class="hint">
+        你后面如果要做“全群统一排行”，只需要把下面这个 <span class="mono">API_BASE</span> 指向你的后端，并在后端实现：
+        <span class="mono">POST /checkin</span>、<span class="mono">GET /status</span>、<span class="mono">GET /rank</span> 三个接口即可。
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <div>
+          <label>API_BASE（留空=纯前端；填入=尝试调用后端）</label>
+          <input id="apiBase" class="mono" placeholder="例如：https://example.com/api" />
+        </div>
+      </div>
+      <div class="btns">
+        <button class="primary" id="btnSaveApi">保存API配置</button>
+        <button id="btnTestApi">测试后端连通性</button>
+      </div>
+      <div class="hint mono" id="apiHint"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  // ---------------------------
+  // Helpers
+  // ---------------------------
+  const $ = (id) => document.getElementById(id);
+  const toast = (msg) => {
+    const el = $("toast");
+    el.textContent = msg;
+    el.style.display = "block";
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(() => el.style.display = "none", 2400);
+  };
+
+  const getQuery = () => {
+    const u = new URL(location.href);
+    return {
+      activity: u.searchParams.get("activity") || u.searchParams.get("a") || "",
+      group_code: u.searchParams.get("group_code") || u.searchParams.get("g") || ""
+    };
+  };
+
+  // Local date string in user's device timezone: YYYY-MM-DD
+  const localDateStr = (d = new Date()) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const nowTimeStr = (d = new Date()) => {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return `${hh}:${mm}:${ss}`;
+  };
+
+  const storageKey = (activity, groupCode) => `checkin_v01::${activity}::${groupCode}`;
+  const profileKey = `checkin_v01::profile`;
+  const apiKey = `checkin_v01::api_base`;
+
+  const loadProfile = () => {
+    try { return JSON.parse(localStorage.getItem(profileKey) || "{}"); }
+    catch { return {}; }
+  };
+  const saveProfile = (p) => localStorage.setItem(profileKey, JSON.stringify(p));
+
+  const loadApiBase = () => localStorage.getItem(apiKey) || "";
+  const saveApiBase = (v) => localStorage.setItem(apiKey, v || "");
+
+  const loadDB = (activity, groupCode) => {
+    try {
+      return JSON.parse(localStorage.getItem(storageKey(activity, groupCode)) || "{}");
+    } catch {
+      return {};
+    }
+  };
+  const saveDB = (activity, groupCode, db) => {
+    localStorage.setItem(storageKey(activity, groupCode), JSON.stringify(db));
+  };
+
+  // db structure:
+  // { users: { userId: { nickname, phone } }, checkins: [ { userId, date, time, remark } ] }
+  const ensureDB = (db) => {
+    if (!db.users) db.users = {};
+    if (!Array.isArray(db.checkins)) db.checkins = [];
+    return db;
+  };
+
+  const makeUserId = (nickname, phone) => {
+    // Simple stable identifier for MVP (not secure). Replace with OAuth/phone verification later.
+    const raw = (nickname || "").trim() + "|" + (phone || "").trim();
+    // lightweight hash
+    let h = 0;
+    for (let i = 0; i < raw.length; i++) h = Math.imul(31, h) + raw.charCodeAt(i) | 0;
+    return "u_" + (h >>> 0).toString(16);
+  };
+
+  const getRecent7Count = (db, userId) => {
+    const today = new Date();
+    const set = new Set();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      set.add(localDateStr(d));
+    }
+    return db.checkins.filter(x => x.userId === userId && set.has(x.date)).length;
+  };
+
+  const getTotalCount = (db, userId) =>
+    db.checkins.filter(x => x.userId === userId).length;
+
+  const getLastDate = (db, userId) => {
+    const list = db.checkins
+      .filter(x => x.userId === userId)
+      .sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
+    return list.length ? list[list.length - 1].date : "-";
+  };
+
+  const isCheckedInToday = (db, userId, today) =>
+    db.checkins.some(x => x.userId === userId && x.date === today);
+
+  // ---------------------------
+  // (Optional) API calls
+  // ---------------------------
+  const api = {
+    base: "",
+    async post(path, body){
+      const res = await fetch(this.base + path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    async get(path){
+      const res = await fetch(this.base + path, { method: "GET" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+  };
+
+  // ---------------------------
+  // UI state
+  // ---------------------------
+  const q = getQuery();
+  const today = localDateStr();
+
+  $("todayPill").textContent = today;
+  $("envPill").textContent = /MicroMessenger/i.test(navigator.userAgent) ? "WeChat" : "Browser";
+
+  const profile = loadProfile();
+  $("nickname").value = profile.nickname || "";
+  $("phone").value = profile.phone || "";
+
+  $("activity").value = q.activity || profile.activity || "daily_checkin";
+  $("groupCode").value = q.group_code || profile.groupCode || "group_demo";
+
+  const applyTopPills = () => {
+    $("activityPill").textContent = $("activity").value || "-";
+    $("groupPill").textContent = $("groupCode").value || "-";
+  };
+
+  const refreshStatusAndRank = () => {
+    const activity = $("activity").value.trim();
+    const groupCode = $("groupCode").value.trim();
+    const nickname = $("nickname").value.trim();
+    const phone = $("phone").value.trim();
+
+    applyTopPills();
+
+    if (!activity || !groupCode || !nickname) {
+      $("statusText").textContent = "未就绪";
+      $("statusSub").textContent = "请填写昵称、活动ID与群码，并点击“保存并进入”。";
+      $("statusTag").textContent = "未打卡";
+      $("statusTag").className = "tag no";
+      $("btnCheckin").disabled = true;
+      renderRank(null);
+      return;
+    }
+
+    $("btnCheckin").disabled = false;
+
+    const userId = makeUserId(nickname, phone);
+    const db = ensureDB(loadDB(activity, groupCode));
+    db.users[userId] = { nickname, phone };
+    saveDB(activity, groupCode, db);
+
+    const checked = isCheckedInToday(db, userId, today);
+    if (checked) {
+      $("statusText").textContent = "今日已打卡";
+      $("statusSub").textContent = `用户：${nickname} ｜ ${today}（本地记录）`;
+      $("statusTag").textContent = "已打卡";
+      $("statusTag").className = "tag ok";
+      $("btnCheckin").disabled = true;
+    } else {
+      $("statusText").textContent = "今日未打卡";
+      $("statusSub").textContent = `用户：${nickname} ｜ ${today}`;
+      $("statusTag").textContent = "未打卡";
+      $("statusTag").className = "tag no";
+      $("btnCheckin").disabled = false;
+    }
+
+    renderRank(db);
+  };
+
+  const renderRank = (db) => {
+    const body = $("rankBody");
+    if (!db) {
+      body.innerHTML = `<tr><td colspan="4">暂无数据</td></tr>`;
+      return;
+    }
+    const users = Object.entries(db.users).map(([userId, u]) => {
+      return {
+        userId,
+        name: u.nickname || userId,
+        total: getTotalCount(db, userId),
+        recent7: getRecent7Count(db, userId),
+        last: getLastDate(db, userId)
+      };
+    });
+
+    users.sort((a,b) => (b.total - a.total) || (b.recent7 - a.recent7) || a.name.localeCompare(b.name));
+
+    if (!users.length) {
+      body.innerHTML = `<tr><td colspan="4">暂无数据</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = users.map(u => `
+      <tr>
+        <td><strong>${escapeHtml(u.name)}</strong><div class="small mono">${u.userId}</div></td>
+        <td class="mono">${u.total}</td>
+        <td class="mono">${u.recent7}</td>
+        <td class="mono">${u.last}</td>
+      </tr>
+    `).join("");
+  };
+
+  const escapeHtml = (s) =>
+    String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // ---------------------------
+  // Actions
+  // ---------------------------
+  $("btnSaveProfile").addEventListener("click", () => {
+    const p = {
+      nickname: $("nickname").value.trim(),
+      phone: $("phone").value.trim(),
+      activity: $("activity").value.trim(),
+      groupCode: $("groupCode").value.trim()
+    };
+    if (!p.nickname) return toast("请先填写昵称");
+    if (!p.activity || !p.groupCode) return toast("请填写活动ID与群码");
+    saveProfile(p);
+    toast("已保存");
+    refreshStatusAndRank();
+  });
+
+  $("btnCopyLink").addEventListener("click", async () => {
+    const baseUrl = location.origin + location.pathname;
+    const activity = $("activity").value.trim() || "daily_checkin";
+    const groupCode = $("groupCode").value.trim() || "group_demo";
+    const link = `${baseUrl}?activity=${encodeURIComponent(activity)}&group_code=${encodeURIComponent(groupCode)}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast("已复制群专属链接，可发微信群");
+    } catch {
+      prompt("复制此链接发群：", link);
+    }
+  });
+
+  $("btnReset").addEventListener("click", () => {
+    if (!confirm("确定清空本机所有打卡数据？")) return;
+    // clear only our keys
+    const keys = Object.keys(localStorage);
+    keys.forEach(k => { if (k.startsWith("checkin_v01::")) localStorage.removeItem(k); });
+    toast("已清空");
+    location.reload();
+  });
+
+  $("btnCheckin").addEventListener("click", async () => {
+    const activity = $("activity").value.trim();
+    const groupCode = $("groupCode").value.trim();
+    const nickname = $("nickname").value.trim();
+    const phone = $("phone").value.trim();
+    if (!activity || !groupCode || !nickname) return toast("请先保存昵称、活动ID与群码");
+
+    const userId = makeUserId(nickname, phone);
+    const remark = $("remark").value.trim();
+    const payload = { activity, group_code: groupCode, user_id: userId, nickname, date: today, time: nowTimeStr(), remark };
+
+    // If API_BASE configured, try server first
+    const apiBase = $("apiBase").value.trim();
+    if (apiBase) {
+      try {
+        api.base = apiBase;
+        const resp = await api.post("/checkin", payload);
+        toast(resp.message || "已打卡（后端）");
+        // optional: refresh from server later
+        $("btnCheckin").disabled = true;
+        $("remark").value = "";
+        return;
+      } catch (e) {
+        toast("后端不可用，已改为本地记录");
+        // fall back local
+      }
+    }
+
+    const db = ensureDB(loadDB(activity, groupCode));
+    db.users[userId] = { nickname, phone };
+
+    if (isCheckedInToday(db, userId, today)) {
+      toast("你今天已经打过卡了");
+      refreshStatusAndRank();
+      return;
+    }
+
+    db.checkins.push({ userId, date: today, time: payload.time, remark });
+    saveDB(activity, groupCode, db);
+
+    toast("打卡成功（本地）");
+    $("remark").value = "";
+    refreshStatusAndRank();
+  });
+
+  $("btnViewMine").addEventListener("click", () => {
+    const activity = $("activity").value.trim();
+    const groupCode = $("groupCode").value.trim();
+    const nickname = $("nickname").value.trim();
+    const phone = $("phone").value.trim();
+    if (!activity || !groupCode || !nickname) return toast("请先保存昵称、活动ID与群码");
+
+    const userId = makeUserId(nickname, phone);
+    const db = ensureDB(loadDB(activity, groupCode));
+    const mine = db.checkins
+      .filter(x => x.userId === userId)
+      .sort((a,b) => (b.date + b.time).localeCompare(a.date + a.time))
+      .slice(0, 30);
+
+    if (!mine.length) return toast("暂无记录");
+    const lines = mine.map(x => `${x.date} ${x.time}${x.remark ? " ｜ " + x.remark : ""}`).join("\n");
+    alert(`我的最近记录（最多30条）：\n\n${lines}`);
+  });
+
+  $("btnExport").addEventListener("click", () => {
+    const activity = $("activity").value.trim();
+    const groupCode = $("groupCode").value.trim();
+    if (!activity || !groupCode) return toast("请填写活动ID与群码");
+
+    const db = ensureDB(loadDB(activity, groupCode));
+    const rows = [["activity","group_code","user_id","nickname","date","time","remark"]];
+    for (const x of db.checkins) {
+      const nick = (db.users[x.userId]?.nickname) || "";
+      rows.push([activity, groupCode, x.userId, nick, x.date, x.time, (x.remark || "").replace(/\n/g," ")]);
+    }
+    const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `checkin_${activity}_${groupCode}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast("已导出CSV");
+  });
+
+  $("btnSaveApi").addEventListener("click", () => {
+    const v = $("apiBase").value.trim();
+    saveApiBase(v);
+    toast("已保存API配置");
+    updateApiHint();
+  });
+
+  $("btnTestApi").addEventListener("click", async () => {
+    const v = $("apiBase").value.trim();
+    if (!v) return toast("未配置 API_BASE");
+    try {
+      api.base = v;
+      const resp = await api.get("/ping");
+      toast(resp.message || "后端连通");
+    } catch {
+      toast("后端不通（需要实现 GET /ping）");
+    }
+  });
+
+  const updateApiHint = () => {
+    const v = $("apiBase").value.trim();
+    $("apiHint").textContent = v
+      ? `已启用后端：${v}\n需要接口：POST ${v}/checkin, GET ${v}/ping`
+      : "未启用后端：当前为纯前端本地记录模式";
+  };
+
+  // init
+  $("apiBase").value = loadApiBase();
+  updateApiHint();
+  applyTopPills();
+  refreshStatusAndRank();
+
+})();
+</script>
+</body>
+</html>
