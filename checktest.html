@@ -79,7 +79,7 @@
     <div>
       <h1>英语打卡（3个孩子）</h1>
       <div class="meta">
-        每天每人一次，手动填写英语内容。<br/>
+        每天每人一次，手动填写英语内容（支持语音转文字）。<br/>
         积分：每日 +10；连续第3天 +5，第7天 +10，第14天 +20（当天额外奖励）。
       </div>
     </div>
@@ -103,8 +103,16 @@
       </div>
 
       <div style="margin-top:10px;">
-        <label>今日英语打卡内容（手动填写）</label>
+        <label>今日英语打卡内容（手动填写 / 语音输入）</label>
         <textarea id="content" placeholder="示例：Today I read a story and learned 5 new words..."></textarea>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <button id="btnVoice" class="primary" type="button">语音输入（英文）</button>
+        <button id="btnStopVoice" type="button" disabled>停止</button>
+      </div>
+      <div class="hint" id="voiceHint">
+        提示：若语音按钮不可用，请用手机键盘自带“听写/麦克风”完成语音转文字。
       </div>
 
       <div class="row" style="margin-top:10px;">
@@ -128,7 +136,7 @@
           <div style="font-weight:800;color:#dbe6ff">排行榜</div>
           <div class="meta">按总积分排序（同分按连续天数）。</div>
         </div>
-        <div class="meta mono" style="text-align:right">v0.2</div>
+        <div class="meta mono" style="text-align:right">v0.3</div>
       </div>
 
       <table>
@@ -146,7 +154,7 @@
       </table>
 
       <div class="hint">
-        小提示：连续打卡比单次猛刷更“值钱”，更容易长期坚持。
+        小提示：连续打卡更“值钱”，更容易长期坚持。
       </div>
     </div>
   </div>
@@ -168,7 +176,7 @@
   };
 
   // ===== Storage =====
-  const DB_KEY = "kids_english_checkin_v02";
+  const DB_KEY = "kids_english_checkin_v03";
   const $ = (id) => document.getElementById(id);
   const toast = (msg) => {
     const el = $("toast");
@@ -218,7 +226,6 @@
   const hasCheckedToday = (kid, today) => kid.logs.some(x => x.date === today);
 
   const calcAward = (kid, today) => {
-    // streak update depends on lastDate
     let newStreak = kid.streak || 0;
     if (!kid.lastDate) {
       newStreak = 1;
@@ -228,12 +235,13 @@
       else if (diff === 0) return { ok: false, reason: "已打卡" };
       else newStreak = 1;
     }
-
     const bonus = STREAK_BONUS[newStreak] || 0;
     const total = BASE_POINTS + bonus;
-
     return { ok: true, newStreak, bonus, total };
   };
+
+  const escapeHtml = (s) =>
+    String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   const render = () => {
     const today = localDateStr();
@@ -244,7 +252,6 @@
     const db = ensureDB(loadDB());
     const kid = db.kids[selected];
 
-    // status block
     const checked = hasCheckedToday(kid, today);
     $("kidSummary").textContent = `${selected}：${kid.points} 分`;
     $("kidSub").textContent = `连续 ${kid.streak} 天｜最后打卡：${kid.lastDate || "-"}`;
@@ -259,20 +266,13 @@
       $("btnCheckin").disabled = false;
     }
 
-    // leaderboard
     const rows = KIDS.map(name => {
       const k = db.kids[name];
       const checkedToday = hasCheckedToday(k, today);
-      return {
-        name,
-        points: k.points,
-        streak: k.streak,
-        today: checkedToday ? "已打卡" : "未打卡"
-      };
+      return { name, points: k.points, streak: k.streak, today: checkedToday ? "已打卡" : "未打卡" };
     }).sort((a,b) => (b.points - a.points) || (b.streak - a.streak) || a.name.localeCompare(b.name));
 
-    const body = $("rankBody");
-    body.innerHTML = rows.map(r => `
+    $("rankBody").innerHTML = rows.map(r => `
       <tr>
         <td><strong>${escapeHtml(r.name)}</strong></td>
         <td class="mono">${r.points}</td>
@@ -281,9 +281,6 @@
       </tr>
     `).join("");
   };
-
-  const escapeHtml = (s) =>
-    String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   // init select
   const sel = $("kidSelect");
@@ -374,6 +371,70 @@
     toast("已重置");
     render();
   });
+
+  // ===== 语音转文字（Web Speech API）=====
+  (() => {
+    const btnVoice = $("btnVoice");
+    const btnStop = $("btnStopVoice");
+    const hint = $("voiceHint");
+    const textarea = $("content");
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      btnVoice.disabled = true;
+      if (hint) hint.textContent = "当前浏览器不支持网页语音识别。请使用手机键盘自带“听写/麦克风”。";
+      return;
+    }
+
+    const rec = new SpeechRecognition();
+    rec.lang = "en-US";           // 英语识别
+    rec.interimResults = true;    // 临时结果
+    rec.continuous = false;       // 一次一段（更稳）
+
+    let finalText = "";
+    const setUI = (on) => {
+      btnVoice.disabled = on;
+      btnStop.disabled = !on;
+      if (hint) hint.textContent = on
+        ? "正在识别… 请说英语。识别结束后会自动填入文本框。"
+        : "提示：若语音按钮不可用，请用手机键盘自带“听写/麦克风”完成语音转文字。";
+    };
+
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += t + " ";
+        else interim += t;
+      }
+      textarea.value = (textarea.value.replace(/\s+$/,"") + " " + finalText + interim).trim();
+    };
+
+    rec.onerror = (e) => {
+      setUI(false);
+      if (hint) hint.textContent = `语音识别失败：${e.error || "unknown"}。可改用键盘听写。`;
+    };
+
+    rec.onend = () => {
+      setUI(false);
+      finalText = "";
+    };
+
+    btnVoice.addEventListener("click", () => {
+      try {
+        setUI(true);
+        finalText = "";
+        rec.start();
+      } catch {
+        setUI(false);
+        if (hint) hint.textContent = "无法启动语音识别。请改用键盘听写。";
+      }
+    });
+
+    btnStop.addEventListener("click", () => {
+      try { rec.stop(); } catch {}
+    });
+  })();
 
   // first render
   render();
